@@ -21,5 +21,5 @@ LABEL io.k8s.display-name="OpenShift Origin Smart LB Plugin" \
       io.k8s.description="This is a component of OpenShift Origin and contains an plugin for a smart load balancer outside multiple OpenShift clusters. This plugin tells the smart load balancer about the routes of this cluster" \
       io.openshift.tags="openshift,smart-lb-plugin"
 USER 1002
-ENV SMART_LB_API_URL=localhost:9999/api
+ENV SMART_LB_API_URLS=localhost:9999/api
 ENTRYPOINT ["/usr/bin/openshift-smart-lb-plugin"]

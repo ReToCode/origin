@@ -6,51 +6,108 @@ import (
 	"github.com/openshift/origin/pkg/cmd/util"
 
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
+	routeinternalclientset "github.com/openshift/origin/pkg/route/generated/internalclientset"
+	projectinternalclientset "github.com/openshift/origin/pkg/project/generated/internalclientset"
+	routeapi "github.com/openshift/origin/pkg/route/apis/route"
 
 	"errors"
 	"github.com/golang/glog"
+	"github.com/openshift/origin/pkg/router/smartlbplugin"
+	"github.com/openshift/origin/pkg/cmd/util/clientcmd"
+	"github.com/openshift/origin/pkg/router/controller"
+	"fmt"
 )
 
-type SmartLBPlugin struct {
-	SmartLBApiUrl string
+type SmartLBPluginOptions struct {
+	Config *clientcmd.Config
+
+	SmartLBApiUrls string
+	RouterSelection
 }
 
 // NewCommandSmartLBPlugin provides CLI handler for the smart lb plugin.
 func NewCommandSmartLBPlugin(name string) *cobra.Command {
-	plugin := &SmartLBPlugin {
+	options := &SmartLBPluginOptions {
+		Config: clientcmd.NewConfig(),
 	}
+	options.Config.FromFile = true
 
 	cmd := &cobra.Command{
 		Use: name,
 		Short: "Start the smart lb plugin",
 		Long: "Start the plugin that synchronizes the current routes to the external smart load balancer",
 		Run: func(c *cobra.Command, args []string) {
-			cmdutil.CheckErr(plugin.Validate())
-			cmdutil.CheckErr(plugin.Run())
+			cmdutil.CheckErr(options.Validate())
+			cmdutil.CheckErr(options.Run())
 		},
 	}
 
-	plugin.Bind(cmd.Flags())
+	flag := cmd.Flags()
+	options.Config.Bind(flag)
+	options.Bind(flag)
+	options.RouterSelection.Bind(flag)
 
 	return cmd
 }
 
-func (p *SmartLBPlugin) Bind(flat *pflag.FlagSet) {
-	flat.StringVar(&p.SmartLBApiUrl, "smart-lb-api-url", util.Env("SMART_LB_API_URL", ""), "Specify the URL of smart load balancer API")
+func (p *SmartLBPluginOptions) Bind(flat *pflag.FlagSet) {
+	flat.StringVar(&p.SmartLBApiUrls, "smart-lb-api-urls", util.Env("SMART_LB_API_URLS", ""), "Specify the URLs of smart load balancer API")
 }
 
-func (p *SmartLBPlugin) Validate() error {
-	if p.SmartLBApiUrl == "" {
-		return errors.New("smart load balancer API must be specified")
+func (p *SmartLBPluginOptions) Validate() error {
+	if p.SmartLBApiUrls == "" {
+		return errors.New("smart load balancer APIs must be specified")
 	}
 
 	return nil
 }
 
-func (p *SmartLBPlugin) Run() error {
-	glog.Infof("Starting smart load balancer plugin for remote api: %v", p.SmartLBApiUrl)
+func (p *SmartLBPluginOptions) RouteAdmitterFunc() controller.RouteAdmissionFunc {
+	return func(route *routeapi.Route) error {
+		if err := p.AdmissionCheck(route); err != nil {
+			return err
+		}
 
+		switch route.Spec.WildcardPolicy {
+		case routeapi.WildcardPolicyNone:
+			return nil
 
+		case routeapi.WildcardPolicySubdomain:
+			return fmt.Errorf("Wildcard routes are not supported by this plugin")
+		}
+
+		return fmt.Errorf("unknown wildcard policy %v", route.Spec.WildcardPolicy)
+	}
+}
+
+func (p *SmartLBPluginOptions) Run() error {
+	glog.Infof("Starting smart load balancer plugin for remote api: %v", p.SmartLBApiUrls)
+
+	smartLBPlugin, err:= smartlbplugin.NewSmartLBPlugin(p.SmartLBApiUrls)
+	if err != nil {
+		return err
+	}
+
+	_, kc, err := p.Config.Clients()
+	if err != nil {
+		return err
+	}
+	routeClient, err := routeinternalclientset.NewForConfig(p.Config.OpenShiftConfig())
+	if err != nil {
+		return err
+	}
+	projectClient, err := projectinternalclientset.NewForConfig(p.Config.OpenShiftConfig())
+	if err != nil {
+		return err
+	}
+
+	statusPlugin := controller.NewStatusAdmitter(smartLBPlugin, routeClient, "smart-lb-plugin", "")
+	uniqueHostPlugin := controller.NewUniqueHost(statusPlugin, p.RouteSelectionFunc(), p.RouterSelection.DisableNamespaceOwnershipCheck, statusPlugin)
+	plugin := controller.NewHostAdmitter(uniqueHostPlugin, p.RouteAdmitterFunc(), false, p.RouterSelection.DisableNamespaceOwnershipCheck, statusPlugin)
+
+	factory := p.RouterSelection.NewFactory(routeClient, projectClient.Projects(), kc)
+	controller := factory.Create(plugin, false, false)
+	controller.Run()
 
 	// Do your job now
 	select {}
