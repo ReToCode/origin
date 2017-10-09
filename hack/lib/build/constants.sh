@@ -49,6 +49,7 @@ readonly OS_TEST_TARGETS=(
 #If you update this list, be sure to get the images/origin/Dockerfile
 readonly OPENSHIFT_BINARY_SYMLINKS=(
   openshift-router
+  openshift-smart-lb-plugin
   openshift-deploy
   openshift-recycle
   openshift-sti-build

@@ -30,6 +30,7 @@ import (
 	"github.com/openshift/origin/pkg/cmd/templates"
 	cmdutil "github.com/openshift/origin/pkg/cmd/util"
 	"github.com/openshift/origin/pkg/cmd/util/clientcmd"
+	"log"
 )
 
 var (
@@ -55,9 +56,13 @@ func CommandFor(basename string) *cobra.Command {
 		basename = strings.TrimSuffix(basename, ".exe")
 	}
 
+	log.Println(basename)
+
 	switch basename {
 	case "openshift-router":
 		cmd = irouter.NewCommandTemplateRouter(basename)
+	case "openshift-smart-lb-plugin":
+		cmd = irouter.NewCommandSmartLBPlugin(basename)
 	case "openshift-f5-router":
 		cmd = irouter.NewCommandF5Router(basename)
 	case "openshift-deploy":

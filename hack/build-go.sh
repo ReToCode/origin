@@ -5,7 +5,9 @@ STARTTIME=$(date +%s)
 source "$(dirname "${BASH_SOURCE}")/lib/init.sh"
 
 build_targets=("$@")
-platform="$(os::build::host_platform)"
+#todo: remove me, just for local builds on mac
+#platform="$(os::build::host_platform)"
+platform="darwin/amd64"
 
 # Set build tags for these binaries
 readonly OS_GOFLAGS_TAGS="include_gcs include_oss containers_image_openpgp"
