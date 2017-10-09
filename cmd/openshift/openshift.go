@@ -18,6 +18,7 @@ import (
 	_ "k8s.io/kubernetes/pkg/apis/autoscaling/install"
 	_ "k8s.io/kubernetes/pkg/apis/batch/install"
 	_ "k8s.io/kubernetes/pkg/apis/extensions/install"
+	"log"
 )
 
 func main() {
@@ -32,6 +33,7 @@ func main() {
 	}
 
 	basename := filepath.Base(os.Args[0])
+	log.Println(basename)
 	command := openshift.CommandFor(basename)
 	if err := command.Execute(); err != nil {
 		os.Exit(1)

@@ -31,6 +31,7 @@ import (
 	cmdutil "github.com/openshift/origin/pkg/cmd/util"
 	"github.com/openshift/origin/pkg/cmd/util/clientcmd"
 	"log"
+	"github.com/golang/glog"
 )
 
 var (
@@ -56,7 +57,8 @@ func CommandFor(basename string) *cobra.Command {
 		basename = strings.TrimSuffix(basename, ".exe")
 	}
 
-	log.Println(basename)
+	fmt.Println(basename)
+	glog.Info(basename)
 
 	switch basename {
 	case "openshift-router":
