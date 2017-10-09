@@ -50,6 +50,8 @@ func (p *SmartLBPlugin) Validate() error {
 func (p *SmartLBPlugin) Run() error {
 	glog.Infof("Starting smart load balancer plugin for remote api: %v", p.SmartLBApiUrl)
 
+
+
 	// Do your job now
 	select {}
 }
