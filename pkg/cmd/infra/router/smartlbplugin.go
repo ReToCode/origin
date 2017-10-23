@@ -4,8 +4,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/openshift/origin/pkg/cmd/util"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
+	podinternalclientset "k8s.io/kubernetes/pkg/client/clientset_generated/internalclientset/typed/core/internalversion"
 	routeinternalclientset "github.com/openshift/origin/pkg/route/generated/internalclientset"
 	projectinternalclientset "github.com/openshift/origin/pkg/project/generated/internalclientset"
 	routeapi "github.com/openshift/origin/pkg/route/apis/route"
@@ -16,6 +18,9 @@ import (
 	"github.com/openshift/origin/pkg/cmd/util/clientcmd"
 	"github.com/openshift/origin/pkg/router/controller"
 	"fmt"
+	"k8s.io/apimachinery/pkg/watch"
+	"log"
+	"time"
 )
 
 type SmartLBPluginOptions struct {
@@ -27,15 +32,15 @@ type SmartLBPluginOptions struct {
 
 // NewCommandSmartLBPlugin provides CLI handler for the smart lb plugin.
 func NewCommandSmartLBPlugin(name string) *cobra.Command {
-	options := &SmartLBPluginOptions {
+	options := &SmartLBPluginOptions{
 		Config: clientcmd.NewConfig(),
 	}
 	options.Config.FromFile = true
 
 	cmd := &cobra.Command{
-		Use: name,
+		Use:   name,
 		Short: "Start the smart lb plugin",
-		Long: "Start the plugin that synchronizes the current routes to the external smart load balancer",
+		Long:  "Start the plugin that synchronizes the current routes to the external smart load balancer",
 		Run: func(c *cobra.Command, args []string) {
 			cmdutil.CheckErr(options.Validate())
 			cmdutil.CheckErr(options.Run())
@@ -83,7 +88,7 @@ func (p *SmartLBPluginOptions) RouteAdmitterFunc() controller.RouteAdmissionFunc
 func (p *SmartLBPluginOptions) Run() error {
 	glog.Infof("Starting smart load balancer plugin for remote api: %v", p.SmartLBApiUrls)
 
-	smartLBPlugin, err:= smartlbplugin.NewSmartLBPlugin(p.SmartLBApiUrls)
+	smartLBPlugin, err := smartlbplugin.NewSmartLBPlugin(p.SmartLBApiUrls)
 	if err != nil {
 		return err
 	}
@@ -100,7 +105,12 @@ func (p *SmartLBPluginOptions) Run() error {
 	if err != nil {
 		return err
 	}
+	podClient, err := podinternalclientset.NewForConfig(p.Config.OpenShiftConfig())
+	if err != nil {
+		return err
+	}
 
+	// Handle all the routes
 	statusPlugin := controller.NewStatusAdmitter(smartLBPlugin, routeClient, "smart-lb-plugin", "")
 	uniqueHostPlugin := controller.NewUniqueHost(statusPlugin, p.RouteSelectionFunc(), p.RouterSelection.DisableNamespaceOwnershipCheck, statusPlugin)
 	plugin := controller.NewHostAdmitter(uniqueHostPlugin, p.RouteAdmitterFunc(), false, p.RouterSelection.DisableNamespaceOwnershipCheck, statusPlugin)
@@ -108,6 +118,22 @@ func (p *SmartLBPluginOptions) Run() error {
 	factory := p.RouterSelection.NewFactory(routeClient, projectClient.Projects(), kc)
 	controller := factory.Create(plugin, false, false)
 	controller.Run()
+
+	// Handle all the router pods
+	options := metav1.ListOptions{}
+	podWatch, err := podClient.Pods("default").Watch(options)
+	if err != nil {
+		return err
+	}
+
+	switch event, err := watch.Until(15*time.Second, podWatch); {
+	case err != nil:
+		return err
+	default:
+		log.Println("event", event)
+	}
+
+	log.Println("before end")
 
 	// Do your job now
 	select {}
