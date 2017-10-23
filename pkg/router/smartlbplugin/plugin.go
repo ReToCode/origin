@@ -20,17 +20,17 @@ func NewSmartLBPlugin(apiUrls string) (*SmartLBPlugin, error) {
 }
 
 func (p *SmartLBPlugin) HandleRoute(eventType watch.EventType, route *routeapi.Route) error {
-	glog.V(4).Infof("Processing route for service: %v (%v)", route.Spec.To.Name, route.Spec.Host)
+	glog.Infof("Processing route for service: %v (%v)", route.Spec.To.Name, route.Spec.Host)
 
 	routeName := fmt.Sprintf("host: %v, port: %v, path: %v", route.Spec.Host, route.Spec.Port, route.Spec.Path)
 
 	switch eventType {
 	case watch.Modified:
-		glog.V(4).Infof("Updating route %s", routeName)
+		glog.Infof("Updating route %s", routeName)
 	case watch.Deleted:
-		glog.V(4).Infof("Deleting route %s", routeName)
+		glog.Infof("Deleting route %s", routeName)
 	case watch.Added:
-		glog.V(4).Infof("Adding new route %s", routeName)
+		glog.Infof("Adding new route %s", routeName)
 	}
 
 	return nil

@@ -4,13 +4,13 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/openshift/origin/pkg/cmd/util"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
-	podinternalclientset "k8s.io/kubernetes/pkg/client/clientset_generated/internalclientset/typed/core/internalversion"
+	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 	routeinternalclientset "github.com/openshift/origin/pkg/route/generated/internalclientset"
 	projectinternalclientset "github.com/openshift/origin/pkg/project/generated/internalclientset"
 	routeapi "github.com/openshift/origin/pkg/route/apis/route"
+
+	kinformers "k8s.io/kubernetes/pkg/client/informers/informers_generated/externalversions"
 
 	"errors"
 	"github.com/golang/glog"
@@ -18,9 +18,10 @@ import (
 	"github.com/openshift/origin/pkg/cmd/util/clientcmd"
 	"github.com/openshift/origin/pkg/router/controller"
 	"fmt"
-	"k8s.io/apimachinery/pkg/watch"
-	"log"
+	api_v1 "k8s.io/kubernetes/pkg/api/v1"
+	"k8s.io/client-go/tools/cache"
 	"time"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 type SmartLBPluginOptions struct {
@@ -105,10 +106,6 @@ func (p *SmartLBPluginOptions) Run() error {
 	if err != nil {
 		return err
 	}
-	podClient, err := podinternalclientset.NewForConfig(p.Config.OpenShiftConfig())
-	if err != nil {
-		return err
-	}
 
 	// Handle all the routes
 	statusPlugin := controller.NewStatusAdmitter(smartLBPlugin, routeClient, "smart-lb-plugin", "")
@@ -120,20 +117,33 @@ func (p *SmartLBPluginOptions) Run() error {
 	controller.Run()
 
 	// Handle all the router pods
-	options := metav1.ListOptions{}
-	podWatch, err := podClient.Pods("default").Watch(options)
+	cs, err := clientset.NewForConfig(p.Config.OpenShiftConfig())
 	if err != nil {
 		return err
 	}
+	informerFactory := kinformers.NewSharedInformerFactory(cs, 5 * time.Second)
+	podInformer := informerFactory.Core().V1().Pods()
 
-	switch event, err := watch.Until(15*time.Second, podWatch); {
-	case err != nil:
-		return err
-	default:
-		log.Println("event", event)
-	}
+	podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		UpdateFunc: func(p, np interface{}) {
+			pod := np.(*api_v1.Pod)
+			glog.Infof("pod updated: Name: %v, Status: %v, HostIP: %v",
+				pod.Name, pod.Status.Message, pod.Status.HostIP)
+		},
+		DeleteFunc: func(p interface{}) {
+			pod := p.(*api_v1.Pod)
+			glog.Infof("new pod deleted: Name: %v, Status: %v, HostIP: %v",
+				pod.Name, pod.Status.Message, pod.Status.HostIP)
 
-	log.Println("before end")
+		},
+		AddFunc: func(p interface{}) {
+			pod := p.(*api_v1.Pod)
+			glog.Infof("new pod added: Name: %v, Status: %v, HostIP: %v",
+				pod.Name, pod.Status.Message, pod.Status.HostIP)
+		},
+	})
+
+	informerFactory.Start(wait.NeverStop)
 
 	// Do your job now
 	select {}
