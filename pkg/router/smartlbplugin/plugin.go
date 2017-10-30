@@ -5,6 +5,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	kapi "k8s.io/kubernetes/pkg/api"
+	kapi_v1 "k8s.io/kubernetes/pkg/api/v1"
 	routeapi "github.com/openshift/origin/pkg/route/apis/route"
 	"github.com/golang/glog"
 	"fmt"
@@ -13,10 +14,24 @@ import (
 type SmartLBPlugin struct {
 }
 
-func NewSmartLBPlugin(apiUrls string) (*SmartLBPlugin, error) {
+func NewSmartLBPlugin(apiUrls string) (*SmartLBPlugin) {
 	glog.Infof("Starting new plugin for %v", apiUrls)
 
-	return &SmartLBPlugin{}, nil
+	return &SmartLBPlugin{}
+}
+
+// Todo Filter to Routers
+func (p *SmartLBPlugin) HandlePod(eventType watch.EventType, pod *kapi_v1.Pod) error {
+	if pod.Namespace == "default" && pod.Status.HostIP != "" {
+
+		// This should be a list and configurable, but for this PoC this is good enough:
+		if pod.Labels["deploymentconfig"] == "router" {
+			glog.Infof("router pod changes: Type: %v, Name: %v, HostIP: %v",
+				eventType, pod.Name, pod.Status.HostIP)
+		}
+	}
+
+	return nil
 }
 
 func (p *SmartLBPlugin) HandleRoute(eventType watch.EventType, route *routeapi.Route) error {

@@ -10,18 +10,12 @@ import (
 	projectinternalclientset "github.com/openshift/origin/pkg/project/generated/internalclientset"
 	routeapi "github.com/openshift/origin/pkg/route/apis/route"
 
-	kinformers "k8s.io/kubernetes/pkg/client/informers/informers_generated/externalversions"
-
 	"errors"
 	"github.com/golang/glog"
 	"github.com/openshift/origin/pkg/router/smartlbplugin"
 	"github.com/openshift/origin/pkg/cmd/util/clientcmd"
 	"github.com/openshift/origin/pkg/router/controller"
 	"fmt"
-	api_v1 "k8s.io/kubernetes/pkg/api/v1"
-	"k8s.io/client-go/tools/cache"
-	"time"
-	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 type SmartLBPluginOptions struct {
@@ -89,10 +83,7 @@ func (p *SmartLBPluginOptions) RouteAdmitterFunc() controller.RouteAdmissionFunc
 func (p *SmartLBPluginOptions) Run() error {
 	glog.Infof("Starting smart load balancer plugin for remote api: %v", p.SmartLBApiUrls)
 
-	smartLBPlugin, err := smartlbplugin.NewSmartLBPlugin(p.SmartLBApiUrls)
-	if err != nil {
-		return err
-	}
+	smartLBPlugin := smartlbplugin.NewSmartLBPlugin(p.SmartLBApiUrls)
 
 	_, kc, err := p.Config.Clients()
 	if err != nil {
@@ -117,33 +108,11 @@ func (p *SmartLBPluginOptions) Run() error {
 	controller.Run()
 
 	// Handle all the router pods
-	cs, err := clientset.NewForConfig(p.Config.OpenShiftConfig())
+	kClient, err := clientset.NewForConfig(p.Config.OpenShiftConfig())
 	if err != nil {
 		return err
 	}
-	informerFactory := kinformers.NewSharedInformerFactory(cs, 5 * time.Second)
-	podInformer := informerFactory.Core().V1().Pods()
-
-	podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		UpdateFunc: func(p, np interface{}) {
-			pod := np.(*api_v1.Pod)
-			glog.Infof("pod updated: Name: %v, Status: %v, HostIP: %v",
-				pod.Name, pod.Status.Message, pod.Status.HostIP)
-		},
-		DeleteFunc: func(p interface{}) {
-			pod := p.(*api_v1.Pod)
-			glog.Infof("new pod deleted: Name: %v, Status: %v, HostIP: %v",
-				pod.Name, pod.Status.Message, pod.Status.HostIP)
-
-		},
-		AddFunc: func(p interface{}) {
-			pod := p.(*api_v1.Pod)
-			glog.Infof("new pod added: Name: %v, Status: %v, HostIP: %v",
-				pod.Name, pod.Status.Message, pod.Status.HostIP)
-		},
-	})
-
-	informerFactory.Start(wait.NeverStop)
+	smartlbplugin.CreateAndRunRouterInformer(kClient, smartLBPlugin)
 
 	// Do your job now
 	select {}
