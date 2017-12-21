@@ -1,27 +1,29 @@
 package router
 
 import (
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	"github.com/openshift/origin/pkg/cmd/util"
-	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
-	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
-	routeinternalclientset "github.com/openshift/origin/pkg/route/generated/internalclientset"
 	projectinternalclientset "github.com/openshift/origin/pkg/project/generated/internalclientset"
 	routeapi "github.com/openshift/origin/pkg/route/apis/route"
+	routeinternalclientset "github.com/openshift/origin/pkg/route/generated/internalclientset"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
+	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 
 	"errors"
+	"fmt"
+
 	"github.com/golang/glog"
-	"github.com/openshift/origin/pkg/router/smartlbplugin"
 	"github.com/openshift/origin/pkg/cmd/util/clientcmd"
 	"github.com/openshift/origin/pkg/router/controller"
-	"fmt"
+	"github.com/openshift/origin/pkg/router/smartlbplugin"
 )
 
 type SmartLBPluginOptions struct {
 	Config *clientcmd.Config
 
 	SmartLBApiUrls string
+	ClusterKey     string
 	RouterSelection
 }
 
@@ -52,6 +54,7 @@ func NewCommandSmartLBPlugin(name string) *cobra.Command {
 
 func (p *SmartLBPluginOptions) Bind(flat *pflag.FlagSet) {
 	flat.StringVar(&p.SmartLBApiUrls, "smart-lb-api-urls", util.Env("SMART_LB_API_URLS", ""), "Specify the URLs of smart load balancer API")
+	flat.StringVar(&p.ClusterKey, "cluster-key", util.Env("CLUSTER_KEY", ""), "Specify the cluster unique name")
 }
 
 func (p *SmartLBPluginOptions) Validate() error {
@@ -83,7 +86,7 @@ func (p *SmartLBPluginOptions) RouteAdmitterFunc() controller.RouteAdmissionFunc
 func (p *SmartLBPluginOptions) Run() error {
 	glog.Infof("Starting smart load balancer plugin for remote api: %v", p.SmartLBApiUrls)
 
-	smartLBPlugin := smartlbplugin.NewSmartLBPlugin(p.SmartLBApiUrls)
+	smartLBPlugin := smartlbplugin.NewSmartLBPlugin(p.SmartLBApiUrls, p.ClusterKey)
 
 	_, kc, err := p.Config.Clients()
 	if err != nil {
@@ -108,11 +111,11 @@ func (p *SmartLBPluginOptions) Run() error {
 	controller.Run()
 
 	// Handle all the router pods
-	kClient, err := clientset.NewForConfig(p.Config.OpenShiftConfig())
+	client, err := clientset.NewForConfig(p.Config.OpenShiftConfig())
 	if err != nil {
 		return err
 	}
-	smartlbplugin.CreateAndRunRouterInformer(kClient, smartLBPlugin)
+	smartlbplugin.CreateAndRunRouterInformer(client, smartLBPlugin)
 
 	// Do your job now
 	select {}
