@@ -112,7 +112,7 @@ func (p *SmartLBPlugin) HandlePod(eventType watch.EventType, pod *kapi_v1.Pod) e
 			p.mux.Lock()
 			switch eventType {
 			case watch.Modified, watch.Added:
-				p.RouterHosts[pod.Name] = RouterHost{Name: pod.Name, HostIP: "127.0.0.1", HTTPPort: httpPort, HTTPSPort: httpsPort}
+				p.RouterHosts[pod.Name] = RouterHost{Name: pod.Name, HostIP: pod.Status.HostIP, HTTPPort: httpPort, HTTPSPort: httpsPort}
 			case watch.Deleted:
 				delete(p.RouterHosts, pod.Name)
 			}

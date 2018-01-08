@@ -50,6 +50,7 @@ os::build::image "${tag_prefix}-service-catalog"       images/service-catalog
 # images that depend on "${tag_prefix}-base"
 os::build::image "${tag_prefix}"                       images/origin
 os::build::image "${tag_prefix}-haproxy-router"        images/router/haproxy
+os::build::image "${tag_prefix}-smart-lb"              images/router/smart-lb
 os::build::image "${tag_prefix}-keepalived-ipfailover" images/ipfailover/keepalived
 os::build::image "${tag_prefix}-docker-registry"       images/dockerregistry
 os::build::image "${tag_prefix}-egress-router"         images/egress/router

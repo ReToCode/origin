@@ -96,7 +96,12 @@ image_config = {
         },
         "files": {}
     },
-    "haproxy-router": {
+    "smart-lb": {
+        "directory": "router/smart-lb",
+        "binaries": {
+            "openshift": "/usr/bin/openshift"
+        },
+    }, "haproxy-router": {
         "directory": "router/haproxy",
         "binaries": {
             "openshift": "/usr/bin/openshift"
