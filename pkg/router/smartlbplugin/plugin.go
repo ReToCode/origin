@@ -17,6 +17,7 @@ import (
 	kapi_v1 "k8s.io/kubernetes/pkg/api/v1"
 	"net/http"
 	"time"
+	"strconv"
 )
 
 // Should all be configurable, but this is fine for the PoC
@@ -131,7 +132,12 @@ func (p *SmartLBPlugin) HandleRoute(eventType watch.EventType, route *routeapi.R
 
 	switch eventType {
 	case watch.Modified, watch.Added:
-		p.Routes[route.Spec.Host] = Route{URL: route.Spec.Host, Weight: defaultWeight}
+		w := defaultWeight
+		if weight, err := strconv.Atoi(route.Annotations["smartlb-weight"]); err == nil {
+			glog.Infof("Read smartlb-weight annotation, value: %v", weight)
+			w = weight
+		}
+		p.Routes[route.Spec.Host] = Route{URL: route.Spec.Host, Weight: w}
 	case watch.Deleted:
 		delete(p.Routes, route.Spec.Host)
 	}
